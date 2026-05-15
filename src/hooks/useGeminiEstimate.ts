@@ -147,8 +147,7 @@ export function useGeminiEstimate() {
             if (!wsRef.current) return
             if (outCtx.currentTime >= expectedEnd && outCtx.currentTime >= nextPlayRef.current) {
               nextPlayRef.current = 0
-              // エコー対策：音声再生終了後 500ms はマイク入力を無視し続ける
-              setTimeout(() => { isAITalkingRef.current = false }, 500)
+              isAITalkingRef.current = false
               if (estimateReveal) setEstimateResult(estimateReveal)
               setContactData(prev => ({ ...prev, ...contactBufferRef.current }))
               if (isSubmittedRef.current) {
