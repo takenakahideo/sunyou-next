@@ -55,6 +55,9 @@ export function useGeminiEstimate() {
   const isAITalkingRef    = useRef<boolean>(false)
   const contactBufferRef  = useRef<ContactData>({})
   const isSubmittedRef    = useRef<boolean>(false)
+  const reconnectCountRef = useRef<number>(0)
+  const userClosedRef     = useRef<boolean>(false)
+  const MAX_RECONNECT     = 2
 
   const cleanup = useCallback(() => {
     try {
@@ -71,8 +74,10 @@ export function useGeminiEstimate() {
   }, [])
 
   const disconnect = useCallback(() => {
+    userClosedRef.current = true  // 自動再接続を抑止
     wsRef.current?.close(); wsRef.current = null
     cleanup(); setVoiceState('idle')
+    reconnectCountRef.current = 0
   }, [cleanup])
 
   const sendText = useCallback((text: string) => {
@@ -96,10 +101,14 @@ export function useGeminiEstimate() {
     if (wsRef.current !== null) return
 
     setVoiceState('connecting')
-    setEstimateResult(null); setContactData({}); setInquiryResult(null)
-    setSuggestions([]); setAiQuestion(''); setCustomerTranscripts([])
-    contactBufferRef.current = {}
-    isSubmittedRef.current = false
+    // 初回接続のみ状態リセット（自動再接続時は会話状態を維持）
+    if (reconnectCountRef.current === 0) {
+      setEstimateResult(null); setContactData({}); setInquiryResult(null)
+      setSuggestions([]); setAiQuestion(''); setCustomerTranscripts([])
+      contactBufferRef.current = {}
+      isSubmittedRef.current = false
+      userClosedRef.current = false
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -204,7 +213,24 @@ export function useGeminiEstimate() {
       ws.onerror = () => { setVoiceState('error'); cleanup() }
       ws.onclose = () => {
         cleanup()
-        setVoiceState(s => (s === 'done' ? 'done' : 'idle'))
+        // 送信完了済み・ユーザー手動切断・接続済み state なら再接続しない
+        if (isSubmittedRef.current || userClosedRef.current) {
+          setVoiceState(s => (s === 'done' ? 'done' : 'idle'))
+          reconnectCountRef.current = 0
+          return
+        }
+        // 自動再接続（最大 MAX_RECONNECT 回まで・1秒後）
+        if (reconnectCountRef.current < MAX_RECONNECT) {
+          reconnectCountRef.current += 1
+          console.log(`[Gemini Estimate] 自動再接続 (${reconnectCountRef.current}/${MAX_RECONNECT})`)
+          setTimeout(() => {
+            wsRef.current = null
+            connect()
+          }, 1000)
+        } else {
+          setVoiceState('idle')
+          reconnectCountRef.current = 0
+        }
       }
     } catch (err) {
       console.error('[Gemini Estimate] 接続エラー:', err)
