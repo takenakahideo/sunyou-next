@@ -41,7 +41,11 @@ export function EstimateChatModal() {
     setManualEditMode(true)
   }
 
+  const submitGuardRef = useRef<boolean>(false)
   async function handleSubmit(data: ContactData) {
+    // 二重送信ガード：すでに送信中・送信済みなら何もしない
+    if (submitGuardRef.current || submittedData) return
+    submitGuardRef.current = true
     try {
       const payload = {
         ...data,
@@ -66,8 +70,11 @@ export function EstimateChatModal() {
       if (json.success) {
         setSubmittedData(data)
         submitCompleted()
+      } else {
+        submitGuardRef.current = false  // 失敗時はガード解除して再試行可
       }
     } catch {
+      submitGuardRef.current = false
       alert('送信に失敗しました。もう一度お試しください。')
     }
   }

@@ -89,13 +89,43 @@ async function sendLineNotification(data: InquiryData, timestamp: string) {
   })
 }
 
+// 重複登録防止：直近10秒以内に同じ電話番号の登録があれば拒否
+const recentSubmissions = new Map<string, number>()
+const DEDUPE_WINDOW_MS = 10_000
+
 export async function POST(req: NextRequest) {
   try {
-    const data: InquiryData = await req.json()
+    // 空・不正リクエスト対策：req.json() が失敗してもクラッシュしない
+    let data: InquiryData
+    try {
+      const text = await req.text()
+      if (!text || text === 'undefined' || text.trim() === '') {
+        return NextResponse.json({ success: false, message: '空リクエスト' }, { status: 400 })
+      }
+      data = JSON.parse(text)
+    } catch {
+      return NextResponse.json({ success: false, message: '不正なJSON' }, { status: 400 })
+    }
 
     // バリデーション
     if (!data.name?.trim() || !data.phone?.trim()) {
       return NextResponse.json({ success: false, message: '名前と電話番号は必須です' }, { status: 400 })
+    }
+
+    // 重複防止：直近10秒以内の同一電話番号は拒否
+    const now = Date.now()
+    const phoneKey = data.phone.replace(/[^\d]/g, '')
+    const lastSubmit = recentSubmissions.get(phoneKey)
+    if (lastSubmit && now - lastSubmit < DEDUPE_WINDOW_MS) {
+      console.log(`[/api/inquiry] 重複拒否: ${phoneKey}（${now - lastSubmit}ms前に登録済み）`)
+      return NextResponse.json({ success: true, message: '既に受付済みです', duplicate: true }, { status: 200 })
+    }
+    recentSubmissions.set(phoneKey, now)
+    // 古いエントリをクリア（メモリ肥大化防止）
+    if (recentSubmissions.size > 100) {
+      for (const [k, t] of recentSubmissions) {
+        if (now - t > DEDUPE_WINDOW_MS) recentSubmissions.delete(k)
+      }
     }
 
     const timestamp = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
