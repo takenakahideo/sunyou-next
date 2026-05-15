@@ -28,56 +28,11 @@ export interface ContactData {
   postal?: string
   address?: string
   phone?: string
+  memo?: string
 }
 
-const PEST_CENTER: Record<string, number> = {
-  hakubishin: 150000,
-  nezumi:      80000,
-  hachi:       28000,
-  shiroari:   220000,
-  konchu:      50000,
-  tori:       100000,
-}
-const PEST_SPREAD: Record<string, number> = {
-  hakubishin: 30000,
-  nezumi:     15000,
-  hachi:       8000,
-  shiroari:   40000,
-  konchu:     12000,
-  tori:       20000,
-}
-const PEST_LABEL: Record<string, string> = {
-  hakubishin: 'ハクビシン・タヌキ',
-  nezumi:     'ネズミ',
-  hachi:      'ハチ',
-  shiroari:   'シロアリ',
-  konchu:     '害虫全般',
-  tori:       '鳥獣（コウモリ・鳩等）',
-}
-const BUILDING_MULT:   Record<string, number> = { house: 1.0, mansion: 0.85, store: 1.2, farm: 1.15, other: 1.0 }
-const AREA_MULT:       Record<string, number> = { xsmall: 0.75, small: 0.85, medium: 1.0, large: 1.15, xlarge: 1.3 }
-const AGE_MULT:        Record<string, number> = { new: 0.9, young: 1.0, old: 1.1, veryold: 1.25, unknown: 1.0 }
-const RENOVATION_MULT: Record<string, number> = { none: 1.0, yes: 1.05, unknown: 1.0 }
-const DURATION_MULT:   Record<string, number> = { week: 0.95, month: 1.0, quarter: 1.1, year: 1.2 }
-const HISTORY_MULT:    Record<string, number> = { none: 1.0, self: 1.05, carpenter: 1.1, pro: 1.2 }
 
-function calcEstimate(pest: string, building?: string, duration?: string, age?: string, renovation?: string, history?: string, area?: string): EstimateResult {
-  const center = PEST_CENTER[pest] ?? 100000
-  const spread = PEST_SPREAD[pest] ?? 20000
-  const m = (BUILDING_MULT[building ?? 'house'] ?? 1.0)
-    * (AREA_MULT[area ?? 'medium'] ?? 1.0)
-    * (AGE_MULT[age ?? 'unknown'] ?? 1.0)
-    * (RENOVATION_MULT[renovation ?? 'unknown'] ?? 1.0)
-    * (DURATION_MULT[duration ?? 'month'] ?? 1.0)
-    * (HISTORY_MULT[history ?? 'none'] ?? 1.0)
-  return {
-    min:  Math.round((center * m - spread) / 10000) * 10000,
-    max:  Math.round((center * m + spread) / 10000) * 10000,
-    pest: PEST_LABEL[pest] ?? pest,
-  }
-}
-
-const PLAY_AHEAD    = 0.15
+const PLAY_AHEAD    = 0.30
 const RMS_THRESHOLD = 0.003
 type PlayRef = { current: number }
 
@@ -162,9 +117,6 @@ export function useGeminiEstimate() {
       const ws = new WebSocket(`${proto}//${window.location.host}/api/gemini-estimate`)
       wsRef.current = ws
 
-      const sendTool = (id: unknown, name: string, output: string) =>
-        ws.send(JSON.stringify({ type: 'toolResponse', id, name, output }))
-
       ws.onmessage = async (evt) => {
         let msg: Record<string, unknown>
         try { msg = JSON.parse(evt.data as string) } catch { return }
@@ -179,11 +131,13 @@ export function useGeminiEstimate() {
           playChunk(outCtx, msg.data as string, nextPlayRef); return
         }
         if (msg.type === 'turnComplete') {
+          const estimateReveal = msg.estimateReveal as EstimateResult | undefined
           const expectedEnd = nextPlayRef.current
           const poll = () => {
             if (!wsRef.current) return
             if (outCtx.currentTime >= expectedEnd && outCtx.currentTime >= nextPlayRef.current) {
               nextPlayRef.current = 0; isAITalkingRef.current = false
+              if (estimateReveal) setEstimateResult(estimateReveal)
               setContactData(prev => ({ ...prev, ...contactBufferRef.current }))
               if (isSubmittedRef.current) {
                 // 送信完了の挨拶を話し終わったら切断
@@ -196,32 +150,37 @@ export function useGeminiEstimate() {
           setTimeout(poll, 150); return
         }
 
-        if (msg.type === 'toolCall' && msg.name === 'show_choices') {
-          const args = msg.args as { question: string; choices: string }
-          setAiQuestion(args.question ?? '')
-          setSuggestions(
-            args.choices ? args.choices.split(',').map(s => s.trim()).filter(Boolean) : []
-          )
-          sendTool(msg.id, 'show_choices', 'ok')
-          return
-        }
-
-        if (msg.type === 'toolCall' && msg.name === 'update_display') {
-          const args = msg.args as ContactData
-          contactBufferRef.current = { ...contactBufferRef.current, ...args }
-          sendTool(msg.id, 'update_display', '表示更新済み'); return
-        }
-
-        if (msg.type === 'toolCall' && msg.name === 'finalize_estimate') {
-          const args = msg.args as { pest?: string; building?: string; duration?: string; age?: string; renovation?: string; history?: string; area?: string }
-          const result = {
-            ...calcEstimate(args.pest ?? 'nezumi', args.building, args.duration, args.age, args.renovation, args.history, args.area),
-            building: args.building, age: args.age, renovation: args.renovation,
-            duration: args.duration, history: args.history, area: args.area,
+        if (msg.type === 'uiUpdate') {
+          const args = msg.args as {
+            question?: string; choices?: string
+            symptom?: string; name?: string; postal?: string; address?: string; phone?: string; memo?: string
+            building?: string; area?: string; age?: string; renovation?: string; duration?: string; history?: string
           }
-          setEstimateResult(result)
-          const priceText = `${Math.round(result.min / 10000)}万円〜${Math.round(result.max / 10000)}万円`
-          sendTool(msg.id, 'finalize_estimate', `お見積り金額：${priceText}（${result.pest}）`)
+          const estimateReady  = msg.estimateReady  as boolean | undefined
+          const estimateResult = msg.estimateResult as { min: number; max: number; pest: string } | undefined
+          const contactState   = msg.contactState   as { name?: string; address?: string; phone?: string } | undefined
+
+          if (args.question !== undefined) setAiQuestion(args.question)
+          setSuggestions(args.choices ? args.choices.split(',').map(s => s.trim()).filter(Boolean) : [])
+
+          const contactUpdate: Partial<ContactData> = {}
+          if (args.symptom !== undefined) contactUpdate.symptom = args.symptom
+          if (args.memo    !== undefined) contactUpdate.memo    = args.memo
+          if (args.postal  !== undefined && args.postal !== 'unknown') contactUpdate.postal = args.postal
+          if (contactState?.name)    contactUpdate.name    = contactState.name
+          if (contactState?.address) contactUpdate.address = contactState.address
+          if (contactState?.phone)   contactUpdate.phone   = contactState.phone
+          if (Object.keys(contactUpdate).length > 0) {
+            contactBufferRef.current = { ...contactBufferRef.current, ...contactUpdate }
+          }
+
+          if (estimateReady && estimateResult) {
+            setEstimateResult({
+              ...estimateResult,
+              building: args.building, area: args.area, age: args.age,
+              renovation: args.renovation, duration: args.duration, history: args.history,
+            })
+          }
           return
         }
 

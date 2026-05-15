@@ -43,6 +43,7 @@ export function EstimateChatModal() {
     try {
       const payload = {
         ...data,
+        memo:         data.memo,
         estimatePest: estimateResult?.pest,
         estimateMin:  estimateResult?.min,
         estimateMax:  estimateResult?.max,
@@ -74,7 +75,7 @@ export function EstimateChatModal() {
   if (submittedData) {
     return (
       <Overlay onClose={handleClose}>
-        <YuiHeader voiceState={voiceState === 'idle' ? 'done' : voiceState} onClose={handleClose} />
+        <YuiHeader voiceState="done" onClose={handleClose} />
         <div style={scrollArea}>
           <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
             <div style={{ fontSize: 44, marginBottom: 8 }}>🎉</div>
@@ -90,9 +91,11 @@ export function EstimateChatModal() {
     )
   }
 
+  const isConfirmPhase = !!(contactData.name && contactData.phone)
+
   // ── 切断・エラー画面 ─────────────────────────────────────
   const isDisconnected = voiceState === 'idle' || voiceState === 'error'
-  if (isDisconnected) {
+  if (isDisconnected && !isConfirmPhase) {
     return (
       <Overlay onClose={handleClose}>
         <YuiHeader voiceState={voiceState} onClose={handleClose} />
@@ -118,8 +121,6 @@ export function EstimateChatModal() {
     )
   }
 
-  const isConfirmPhase = !!(contactData.name && contactData.address && contactData.phone)
-
   // ── 通常会話画面 ─────────────────────────────────────────
   return (
     <Overlay onClose={handleClose}>
@@ -130,8 +131,12 @@ export function EstimateChatModal() {
 
         {isConfirmPhase ? (
           <>
-            {/* 確認フェーズ：佐藤結衣の意識あり（手動編集モードでなければ） */}
-            {!manualEditMode && aiQuestion && (
+            {isDisconnected && (
+              <div style={{ background: '#fff3cd', border: '1.5px solid #ffc107', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#856404', lineHeight: 1.6 }}>
+                ⚠️ 接続が切れましたが、入力内容はそのまま送信できます。
+              </div>
+            )}
+            {!manualEditMode && !isDisconnected && aiQuestion && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                 <img src="/uploads/ai-operator.png" alt="佐藤結衣" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', objectPosition: 'top center', flexShrink: 0 }} />
                 <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', fontSize: 14, color: '#1a1a2e', fontWeight: 600, maxWidth: '80%', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', lineHeight: 1.6 }}>
@@ -139,7 +144,7 @@ export function EstimateChatModal() {
                 </div>
               </div>
             )}
-            {!manualEditMode && suggestions.length > 0 && (
+            {!manualEditMode && !isDisconnected && suggestions.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {suggestions.map((s, i) => (
                   <SuggestionChip key={i} label={s} onTap={() => sendText(s)} />
@@ -156,7 +161,6 @@ export function EstimateChatModal() {
           </>
         ) : (
           <>
-            {/* 佐藤結衣の吹き出し */}
             {aiQuestion && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                 <img src="/uploads/ai-operator.png" alt="佐藤結衣" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', objectPosition: 'top center', flexShrink: 0 }} />
@@ -165,13 +169,9 @@ export function EstimateChatModal() {
                 </div>
               </div>
             )}
-
-            {/* リアルタイム受付内容 */}
             {(contactData.name || contactData.address || contactData.phone || contactData.symptom) && (
               <ContactCard data={contactData} estimatePest={estimateResult?.pest ?? null} />
             )}
-
-            {/* 接続中インジケーター */}
             {(voiceState === 'connecting' || voiceState === 'listening') && !aiQuestion && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
                 {[0, 1, 2].map(i => (
@@ -179,8 +179,6 @@ export function EstimateChatModal() {
                 ))}
               </div>
             )}
-
-            {/* 動的選択肢チップ */}
             {suggestions.length > 0 && (
               <div>
                 <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 6, letterSpacing: '0.04em' }}>
@@ -251,7 +249,7 @@ function ConfirmForm({ contactData, estimateResult, onSubmit, manualEditMode, on
   }
 
   async function handleClick() {
-    if (!form.name || !form.address || !form.phone) return
+    if (!form.name || !form.phone) return
     setSubmitting(true)
     await onSubmit(form)
     setSubmitting(false)
@@ -266,10 +264,10 @@ function ConfirmForm({ contactData, estimateResult, onSubmit, manualEditMode, on
         </div>
       )}
       {([
-        { key: 'symptom' as const, label: '被害内容', placeholder: '例：天井裏から足音がする' },
+        { key: 'symptom' as const, label: '被害内容・ご用件', placeholder: '例：天井裏から足音がする' },
         { key: 'name'    as const, label: 'お名前（カタカナ）', placeholder: '例：タナカ タロウ' },
         { key: 'postal'  as const, label: '郵便番号（任意）', placeholder: '例：980-0000', onBlur: handlePostalBlur },
-        { key: 'address' as const, label: 'ご住所（番地・建物名・部屋番号まで）', placeholder: '例：宮城県大崎市古川〇〇1-2-3 △△マンション101' },
+        { key: 'address' as const, label: 'ご住所（任意）', placeholder: '例：宮城県大崎市古川〇〇1-2-3 △△マンション101' },
         { key: 'phone'   as const, label: '電話番号', placeholder: '例：090-0000-0000' },
       ]).map(({ key, label, placeholder, onBlur }) => (
         <div key={key} style={{ marginBottom: 8 }}>
@@ -283,9 +281,19 @@ function ConfirmForm({ contactData, estimateResult, onSubmit, manualEditMode, on
           />
         </div>
       ))}
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3, fontWeight: 600 }}>備考・ご要望（任意）</div>
+        <textarea
+          value={form.memo ?? ''}
+          onChange={e => setForm(prev => ({ ...prev, memo: e.target.value }))}
+          placeholder="例：2時間後以降に電話希望、平日午前のみ対応可"
+          rows={2}
+          style={{ width: '100%', border: '1.5px solid #d4ddf8', borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: "'Noto Sans JP',sans-serif", color: '#1a1a2e', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }}
+        />
+      </div>
       <button
         onClick={handleClick}
-        disabled={submitting || !form.name || !form.address || !form.phone}
+        disabled={submitting || !form.name || !form.phone}
         style={{ marginTop: 6, width: '100%', background: submitting ? '#94a3b8' : 'linear-gradient(135deg,#c0392b,#e74c3c)', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontWeight: 900, fontSize: 15, cursor: submitting ? 'default' : 'pointer', fontFamily: "'Noto Sans JP',sans-serif" }}
       >
         {submitting ? '送信中...' : '✅ 送信する'}
@@ -319,7 +327,6 @@ const closeBtnStyle: React.CSSProperties = {
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(8,16,40,0.85)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', zIndex: 9985, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: "'Noto Sans JP',sans-serif", animation: 'ecmFadeIn 0.25s ease-out' }}
     >
       <div style={{ background: '#f4f6fb', borderRadius: 24, width: '100%', maxWidth: 520, maxHeight: '93vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.5)', animation: 'ecmSlideUp 0.35s cubic-bezier(0.34,1.4,0.64,1)' }}>
@@ -396,7 +403,16 @@ function ContactCard({ data, estimatePest }: { data: ContactData; estimatePest: 
   )
 }
 
+const AREA_LABEL_MAP: Record<string, string> = {
+  '10坪以下':   '10坪以下（33㎡以下）',
+  '11〜20坪':   '11〜20坪（36〜66㎡）',
+  '21〜30坪':   '21〜30坪（69〜99㎡）',
+  '31〜50坪':   '31〜50坪（102〜165㎡）',
+  '51坪以上':   '51坪以上（168㎡〜）',
+}
+
 function SuggestionChip({ label, onTap }: { label: string; onTap: () => void }) {
+  const displayLabel = AREA_LABEL_MAP[label] ?? label
   return (
     <button
       onClick={onTap}
@@ -404,7 +420,7 @@ function SuggestionChip({ label, onTap }: { label: string; onTap: () => void }) 
       onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.borderColor = '#1a3a6e' }}
       onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#c5d0e6' }}
     >
-      {label}
+      {displayLabel}
     </button>
   )
 }
