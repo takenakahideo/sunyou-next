@@ -43,6 +43,9 @@ body {
 .logo-wrap { display: flex; align-items: center; gap: 20px; }
 .logo-wrap img { height: 72px; flex-shrink: 0; background: #fff; border-radius: 10px; padding: 6px 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
 .logo-tagline {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   border-left: 2px solid rgba(255,255,255,0.25);
   padding-left: 20px;
   color: rgba(255,255,255,0.85);
@@ -343,6 +346,19 @@ body {
   .process-steps::before { display: none; }
   .footer-inner { grid-template-columns: 1fr; }
   .header-nav { display: none; }
-  .header-top { padding: 10px 16px; }
-  .logo-tagline { display: none; }
+  .header-top {
+    padding: 10px 16px;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .logo-tagline { display: none !important; }
+  .logo-wrap { justify-content: center; }
+  .logo-wrap img { height: 56px; }
+  #headerAICard {
+    width: 100%;
+    max-width: 100%;
+  }
+  /* 被害アピールセクション：スマホは1列に */
+  .damage-grid { grid-template-columns: 1fr !important; }
 }

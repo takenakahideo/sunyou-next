@@ -43,6 +43,7 @@ export function useGeminiEstimate() {
   const [inquiryResult,  setInquiryResult]  = useState<ContactData | null>(null)
   const [suggestions,    setSuggestions]    = useState<string[]>([])
   const [aiQuestion,     setAiQuestion]     = useState<string>('')
+  const [customerTranscripts, setCustomerTranscripts] = useState<string[]>([])
 
   const wsRef             = useRef<WebSocket | null>(null)
   const inCtxRef          = useRef<AudioContext | null>(null)
@@ -96,7 +97,7 @@ export function useGeminiEstimate() {
 
     setVoiceState('connecting')
     setEstimateResult(null); setContactData({}); setInquiryResult(null)
-    setSuggestions([]); setAiQuestion('')
+    setSuggestions([]); setAiQuestion(''); setCustomerTranscripts([])
     contactBufferRef.current = {}
     isSubmittedRef.current = false
 
@@ -136,11 +137,12 @@ export function useGeminiEstimate() {
           const poll = () => {
             if (!wsRef.current) return
             if (outCtx.currentTime >= expectedEnd && outCtx.currentTime >= nextPlayRef.current) {
-              nextPlayRef.current = 0; isAITalkingRef.current = false
+              nextPlayRef.current = 0
+              // エコー対策：音声再生終了後 500ms はマイク入力を無視し続ける
+              setTimeout(() => { isAITalkingRef.current = false }, 500)
               if (estimateReveal) setEstimateResult(estimateReveal)
               setContactData(prev => ({ ...prev, ...contactBufferRef.current }))
               if (isSubmittedRef.current) {
-                // 送信完了の挨拶を話し終わったら切断
                 wsRef.current?.close(); wsRef.current = null; cleanup()
               } else if (wsRef.current?.readyState === WebSocket.OPEN) {
                 setVoiceState(s => s === 'done' ? 'done' : 'listening')
@@ -165,13 +167,17 @@ export function useGeminiEstimate() {
 
           const contactUpdate: Partial<ContactData> = {}
           if (args.symptom !== undefined) contactUpdate.symptom = args.symptom
-          if (args.memo    !== undefined) contactUpdate.memo    = args.memo
           if (args.postal  !== undefined && args.postal !== 'unknown') contactUpdate.postal = args.postal
           if (contactState?.name)    contactUpdate.name    = contactState.name
           if (contactState?.address) contactUpdate.address = contactState.address
           if (contactState?.phone)   contactUpdate.phone   = contactState.phone
+          // memo はサーバー側で蓄積された値を使う
+          const serverMemo = (contactState as { memo?: string })?.memo
+          if (serverMemo !== undefined) contactUpdate.memo = serverMemo
           if (Object.keys(contactUpdate).length > 0) {
             contactBufferRef.current = { ...contactBufferRef.current, ...contactUpdate }
+            // 即時反映：話し終わりを待たずにフォームに表示
+            setContactData(prev => ({ ...prev, ...contactUpdate }))
           }
 
           if (estimateReady && estimateResult) {
@@ -181,6 +187,11 @@ export function useGeminiEstimate() {
               renovation: args.renovation, duration: args.duration, history: args.history,
             })
           }
+          return
+        }
+
+        if (msg.type === 'customerTranscript') {
+          setCustomerTranscripts(msg.transcripts as string[])
           return
         }
 
@@ -201,7 +212,7 @@ export function useGeminiEstimate() {
     }
   }, [cleanup])
 
-  return { voiceState, estimateResult, contactData, inquiryResult, connect, disconnect, sendText, submitCompleted, suggestions, aiQuestion, setInquiryResult }
+  return { voiceState, estimateResult, contactData, inquiryResult, connect, disconnect, sendText, submitCompleted, suggestions, aiQuestion, setInquiryResult, customerTranscripts }
 }
 
 // ─── Audio utilities ───────────────────────────────────────

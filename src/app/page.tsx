@@ -47,7 +47,7 @@ export default function SanyuNextPage() {
         <div className="header-top">
           <div className="logo-wrap">
             <img src="/uploads/logo-main.png" alt="SunYou Next サンユー・ネクスト LLC" />
-            <div className="logo-tagline" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div className="logo-tagline">
               <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)' }}>大崎市で創業40年。信頼と実績。</span>
               <span style={{ fontSize: 26, fontWeight: 900, color: '#fff', lineHeight: 1.25, letterSpacing: '0.01em' }}>
                 「三友薬品消毒」が<span style={{ color: '#ffa04a' }}>「サンユー・ネクスト」</span>
@@ -396,7 +396,7 @@ export default function SanyuNextPage() {
             <h2 style={{ fontSize: 30, fontWeight: 900, color: '#1a3a6e', lineHeight: 1.4 }}>放っておくと、もっと大変なことになります</h2>
             <p style={{ color: '#6b7280', fontSize: 15, marginTop: 10 }}>害獣・シロアリは発見した時には、すでに深刻な被害が広がっています</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="damage-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             {/* ハクビシンカード */}
             <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.12)', border: '2px solid #f5821f', position: 'relative' }}>
               <div style={{ position: 'absolute', top: 14, left: 14, background: '#f5821f', color: '#fff', fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 20, zIndex: 10, letterSpacing: '0.05em' }}>🦝 ハクビシン被害</div>

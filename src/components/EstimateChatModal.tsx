@@ -7,13 +7,15 @@ export function EstimateChatModal() {
   const [open, setOpen] = useState(false)
   const [submittedData, setSubmittedData] = useState<ContactData | null>(null)
   const [manualEditMode, setManualEditMode] = useState(false)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const {
     voiceState,
     estimateResult, contactData,
     connect, disconnect, sendText, submitCompleted,
-    suggestions, aiQuestion,
+    suggestions, aiQuestion, customerTranscripts,
   } = useGeminiEstimate()
+
 
   useEffect(() => {
     const handler = () => { setOpen(true); connect() }
@@ -53,6 +55,7 @@ export function EstimateChatModal() {
         renovation:   estimateResult?.renovation,
         duration:     estimateResult?.duration,
         history:      estimateResult?.history,
+        customerVoice: customerTranscripts,
       }
       const res = await fetch('/api/inquiry', {
         method: 'POST',
@@ -91,11 +94,14 @@ export function EstimateChatModal() {
     )
   }
 
-  const isConfirmPhase = !!(contactData.name && contactData.phone)
+  // フロー判定：見積もり進行中 or 問い合わせ進行中
+  const isEstimateFlow = !!(estimateResult || contactData.symptom)
+  const isInquiryFlow  = !!contactData.memo && !isEstimateFlow
+  const isConfirmPhase = isEstimateFlow
 
   // ── 切断・エラー画面 ─────────────────────────────────────
   const isDisconnected = voiceState === 'idle' || voiceState === 'error'
-  if (isDisconnected && !isConfirmPhase) {
+  if (isDisconnected && !isConfirmPhase && !isInquiryFlow) {
     return (
       <Overlay onClose={handleClose}>
         <YuiHeader voiceState={voiceState} onClose={handleClose} />
@@ -126,72 +132,57 @@ export function EstimateChatModal() {
     <Overlay onClose={handleClose}>
       <YuiHeader voiceState={voiceState} onClose={handleClose} />
 
-      <div style={scrollArea}>
+      {/* 固定エリア：佐藤結衣の発言・見積もりカード（常に画面上部に残る） */}
+      <div style={fixedArea}>
+        {/* 佐藤結衣の発言テキスト */}
+        {aiQuestion && !manualEditMode && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <img src="/uploads/ai-operator.png" alt="佐藤結衣" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', objectPosition: 'top center', flexShrink: 0 }} />
+            <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: '18px 18px 18px 4px', padding: '12px 16px', fontSize: 17, color: '#1a1a2e', fontWeight: 600, maxWidth: '82%', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', lineHeight: 1.65 }}>
+              {aiQuestion}
+            </div>
+          </div>
+        )}
+
+        {/* 接続インジケータ */}
+        {(voiceState === 'connecting' || voiceState === 'listening') && !aiQuestion && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+            {[0, 1, 2].map(i => (
+              <span key={i} style={{ width: 9, height: 9, borderRadius: '50%', background: '#94a3b8', animation: `ecmBounce 1.2s ${i * 0.2}s infinite ease-in-out`, display: 'inline-block' }} />
+            ))}
+          </div>
+        )}
+
+        {/* 仮見積もりカード */}
         {estimateResult && <EstimateCard result={estimateResult} />}
 
-        {isConfirmPhase ? (
-          <>
-            {isDisconnected && (
-              <div style={{ background: '#fff3cd', border: '1.5px solid #ffc107', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#856404', lineHeight: 1.6 }}>
-                ⚠️ 接続が切れましたが、入力内容はそのまま送信できます。
-              </div>
-            )}
-            {!manualEditMode && !isDisconnected && aiQuestion && (
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-                <img src="/uploads/ai-operator.png" alt="佐藤結衣" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', objectPosition: 'top center', flexShrink: 0 }} />
-                <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', fontSize: 14, color: '#1a1a2e', fontWeight: 600, maxWidth: '80%', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', lineHeight: 1.6 }}>
-                  {aiQuestion}
-                </div>
-              </div>
-            )}
-            {!manualEditMode && !isDisconnected && suggestions.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {suggestions.map((s, i) => (
-                  <SuggestionChip key={i} label={s} onTap={() => sendText(s)} />
-                ))}
-              </div>
-            )}
-            <ConfirmForm
-              contactData={contactData}
-              estimateResult={estimateResult}
-              onSubmit={handleSubmit}
-              manualEditMode={manualEditMode}
-              onManualEdit={handleManualEdit}
-            />
-          </>
-        ) : (
-          <>
-            {aiQuestion && (
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-                <img src="/uploads/ai-operator.png" alt="佐藤結衣" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', objectPosition: 'top center', flexShrink: 0 }} />
-                <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: '18px 18px 18px 4px', padding: '10px 14px', fontSize: 14, color: '#1a1a2e', fontWeight: 600, maxWidth: '80%', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', lineHeight: 1.6 }}>
-                  {aiQuestion}
-                </div>
-              </div>
-            )}
-            {(contactData.name || contactData.address || contactData.phone || contactData.symptom) && (
-              <ContactCard data={contactData} estimatePest={estimateResult?.pest ?? null} />
-            )}
-            {(voiceState === 'connecting' || voiceState === 'listening') && !aiQuestion && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
-                {[0, 1, 2].map(i => (
-                  <span key={i} style={{ width: 9, height: 9, borderRadius: '50%', background: '#94a3b8', animation: `ecmBounce 1.2s ${i * 0.2}s infinite ease-in-out`, display: 'inline-block' }} />
-                ))}
-              </div>
-            )}
-            {suggestions.length > 0 && (
-              <div>
-                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 6, letterSpacing: '0.04em' }}>
-                  選択するか、話しかけてください 👆
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {suggestions.map((s, i) => (
-                    <SuggestionChip key={i} label={s} onTap={() => sendText(s)} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
+        {/* 切断時の警告 */}
+        {isDisconnected && (isEstimateFlow || isInquiryFlow) && (
+          <div style={{ background: '#fff3cd', border: '1.5px solid #ffc107', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#856404', lineHeight: 1.6 }}>
+            ⚠️ 接続が切れましたが、入力内容はそのまま送信できます。
+          </div>
+        )}
+      </div>
+
+      {/* スクロールエリア：フォーム部分のみ（縦に伸びる） */}
+      <div ref={scrollRef} style={scrollArea}>
+        {/* フローA：確認フォーム（最初から常時表示・徐々に自動入力） */}
+        {isEstimateFlow && (
+          <ConfirmForm
+            contactData={contactData}
+            estimateResult={estimateResult}
+            onSubmit={handleSubmit}
+            manualEditMode={manualEditMode}
+            onManualEdit={handleManualEdit}
+          />
+        )}
+
+        {/* フローB：受付内容カード＋送信 */}
+        {isInquiryFlow && (
+          <InquiryForm
+            contactData={contactData}
+            onSubmit={handleSubmit}
+          />
         )}
       </div>
 
@@ -310,10 +301,89 @@ function ConfirmForm({ contactData, estimateResult, onSubmit, manualEditMode, on
   )
 }
 
+// ─── フローB（問い合わせ）用フォーム ──────────────────────
+
+function InquiryForm({ contactData, onSubmit }: {
+  contactData: ContactData
+  onSubmit: (data: ContactData) => void
+}) {
+  const [form, setForm] = useState<ContactData>({ ...contactData })
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    setForm(prev => ({ ...prev, ...contactData }))
+  }, [contactData])
+
+  const set = (key: keyof ContactData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(prev => ({ ...prev, [key]: e.target.value }))
+
+  async function handleClick() {
+    if (!form.name || !form.phone) return
+    setSubmitting(true)
+    await onSubmit(form)
+    setSubmitting(false)
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#1a3a6e', marginBottom: 10 }}>📋 お問い合わせ内容</div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3, fontWeight: 600 }}>ご用件</div>
+        <textarea
+          value={form.memo ?? ''}
+          onChange={set('memo')}
+          placeholder="ご用件・ご質問内容"
+          rows={2}
+          style={{ width: '100%', border: '1.5px solid #d4ddf8', borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: "'Noto Sans JP',sans-serif", color: '#1a1a2e', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }}
+        />
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3, fontWeight: 600 }}>お名前（カタカナ）</div>
+        <input
+          value={form.name ?? ''}
+          onChange={set('name')}
+          placeholder="例：タナカ タロウ"
+          style={{ width: '100%', border: '1.5px solid #d4ddf8', borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: "'Noto Sans JP',sans-serif", color: '#1a1a2e', boxSizing: 'border-box', outline: 'none' }}
+        />
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3, fontWeight: 600 }}>電話番号</div>
+        <input
+          value={form.phone ?? ''}
+          onChange={set('phone')}
+          placeholder="例：090-0000-0000"
+          style={{ width: '100%', border: '1.5px solid #d4ddf8', borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: "'Noto Sans JP',sans-serif", color: '#1a1a2e', boxSizing: 'border-box', outline: 'none' }}
+        />
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3, fontWeight: 600 }}>ご住所（任意）</div>
+        <input
+          value={form.address ?? ''}
+          onChange={set('address')}
+          placeholder="例：宮城県大崎市古川○○1-2-3"
+          style={{ width: '100%', border: '1.5px solid #d4ddf8', borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: "'Noto Sans JP',sans-serif", color: '#1a1a2e', boxSizing: 'border-box', outline: 'none' }}
+        />
+      </div>
+      <button
+        onClick={handleClick}
+        disabled={submitting || !form.name || !form.phone}
+        style={{ marginTop: 6, width: '100%', background: submitting ? '#94a3b8' : 'linear-gradient(135deg,#c0392b,#e74c3c)', color: '#fff', border: 'none', borderRadius: 10, padding: '13px', fontWeight: 900, fontSize: 15, cursor: submitting ? 'default' : 'pointer', fontFamily: "'Noto Sans JP',sans-serif" }}
+      >
+        {submitting ? '送信中...' : '✅ 送信する'}
+      </button>
+    </div>
+  )
+}
+
 // ─── Styles ────────────────────────────────────────────────
 
+const fixedArea: React.CSSProperties = {
+  flexShrink: 0, padding: '16px 18px 8px',
+  background: '#f4f6fb', display: 'flex', flexDirection: 'column', gap: 12,
+  borderBottom: '1px solid #e8ecf4',
+}
 const scrollArea: React.CSSProperties = {
-  flex: 1, overflowY: 'auto', padding: '16px 18px 8px',
+  flex: 1, overflowY: 'auto', padding: '12px 18px',
   background: '#f4f6fb', display: 'flex', flexDirection: 'column', gap: 12,
 }
 const closeBtnStyle: React.CSSProperties = {
@@ -375,6 +445,29 @@ function EstimateCard({ result }: { result: { min: number; max: number; pest: st
       <div style={{ color: 'rgba(255,200,100,0.9)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4 }}>{result.pest} ／ 簡易お見積り</div>
       <div style={{ color: '#fff', fontWeight: 900, fontSize: 24 }}>{Math.round(result.min / 10000)}万円 〜 {Math.round(result.max / 10000)}万円</div>
       <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, marginTop: 4 }}>※現地調査でより正確な金額をご提示します</div>
+    </div>
+  )
+}
+
+function CustomerVoiceCard({ transcripts }: { transcripts: string[] }) {
+  // 最新5件を表示（古いものは折りたたみ）
+  const recent = transcripts.slice(-5)
+  const olderCount = transcripts.length - recent.length
+  return (
+    <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#1a3a6e', marginBottom: 6, letterSpacing: '0.04em' }}>
+        🎙 お客様の声 {transcripts.length > 0 && `(${transcripts.length}件)`}
+      </div>
+      {olderCount > 0 && (
+        <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>...以前 {olderCount}件</div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {recent.map((t, i) => (
+          <div key={i} style={{ background: '#f0f4ff', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
+            「{t}」
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

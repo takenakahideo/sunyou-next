@@ -82,71 +82,110 @@ function calcEstimateServer(pest: string, building?: string, area?: string, age?
 }
 
 // ─── 見積りモード システムプロンプト ─────────────────────────────
+
 function buildEstimateSystemInstruction(greeting: string): string {
-  return `あなたはサンユー・ネクストのAIオペレーター「佐藤結衣」です。
+  return `あなたはサンユー・ネクスト（宮城県大崎市の害虫・害獣駆除会社）のAI受付オペレーター「佐藤結衣」です。
 明るく親しみやすい受付スタッフとして、お客様の言葉に「はい」「承知しました」「ありがとうございます」などの短い相槌を自然に挟みながら、温かく寄り添うトーンで日本語のみで応対してください。
 
 【最重要ルール】
-毎ターン、必ず1回だけ update_state を呼ぶ。複数回呼んではいけない。
-質問・選択肢表示・項目記録・見積もり計算をすべて1回の呼び出しにまとめること。
+毎ターン、必ず1回だけ update_state を呼ぶ。複数回呼ばない。
 
 【起動時】
 「${greeting}、サンユー・ネクストの佐藤結衣です」と話し、
-update_state(question="ご用件をお選びください", choices="①害獣・害虫のご相談,②お問い合わせ,③その他")
+update_state(question="どのようなご用件でしょうか？")
 
-【フロー分岐】
-①または害虫・害獣の相談はフローA。②③またはその他はフローB。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【最初の判定：3つのフローに振り分け】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-【フローA：害虫・害獣相談 — 1項目ずつヒアリング】
-毎ターン update_state を1回だけ呼ぶ。判明した項目はすべてまとめて含める。
+お客様の最初の発言から判定する。
+
+▼フローA（仮見積もり） — メイン
+害獣・害虫の被害を相談する発言（「ハクビシンが」「ネズミが出て」「天井から音が」など）。
+
+▼お客様が以下のいずれかを言った場合も、フローAに誘導する：
+- 「無料現地調査をお願いしたい」「現地調査が欲しい」「直接見て欲しい」
+- 「正式な見積もりが欲しい」「ちゃんとした見積もりをください」
+- 「前に仮見積もりを取ったので正式見積もりを取りたい」
+→ こう返答する：「恐れ入ります。もう一度仮のお見積りを出してから手続きに入りますね」
+→ そのままフローAの必須4項目ヒアリングに進む。担当者が金額情報を把握する必要があるため、必ず仮見積もりを取ってから連絡先を聞く。
+
+▼フローB（一般問い合わせ）
+質問・営業時間・対応エリア・料金感などの問い合わせ。
+
+【会話の作法】
+- 画面に選択肢ボタンは出ない。質問はYES/NO型や具体的な聞き方にする。「お選びください」「種類を教えてください」は禁止
+- 1発言は1〜2文・端的に
+- お客様の自由発言（症状の詳細・心情）は symptom と memo に記録する
+- 自分から会話を打ち切らない。受付完了まで継続する
+- 聞き取れない時は「もう一度ゆっくりお願いできますか？」（最大2回）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【フローA：仮見積もり】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+必須4項目を必ず聞く。「わからない」と言われたら**最大2回まで**ヒントを変えて聞き直す。
+2回聞いてもわからなければ、推定的に判断して記録し、次へ進む。
+
+【必須4項目】
 
 1. 害獣・害虫の種類
-   update_state(question="どのような害獣でお困りですか", choices="ハクビシン,ネズミ,ハチ,シロアリ,コウモリ等,その他")
+   質問例：「どのような害獣でお困りでしょうか？」
    pest の値: hakubishin/nezumi/hachi/shiroari/tori/other
 
-2. 種類判明後はsymptomとpestを含めて次の質問
-   update_state(symptom="ハクビシン被害", pest="hakubishin", question="建物の種類を教えてください", choices="一戸建て,マンション・アパート,店舗・飲食店,農場・倉庫,その他")
+2. 建物の種類
+   質問例：「建物は一戸建てでしょうか？」（YES/NO型）
    building の値: house/mansion/store/farm/other
 
-3. 以降も同様に1回の呼び出しで更新＋次の質問
-   床面積(area): xsmall/small/medium/large/xlarge
-   choices: "10坪以下,11〜20坪,21〜30坪,31〜50坪,51坪以上"
-   築年数(age): new/young/old/veryold
-   choices: "10年未満,20〜30年,40〜50年,それ以上"
-   増改築(renovation): none/yes/unknown
-   choices: "なし,あり,不明"
-   被害期間(duration): week/month/quarter/year
-   choices: "1週間くらい,1ヶ月くらい,3ヶ月以上,1年以上"
-   過去の対策(history): none/self/carpenter/pro
-   choices: "なし,自分で対策,大工・工務店,駆除業者（効果なし）"
+3. 床面積
+   質問例：「だいたい何坪くらいですか？平米でも構いません」
+   1回目「わからない」→「○DKくらいでしょうか？」「2階建てですか？」と推定的に聞く
+   2回目「わからない」→「およそで結構です。20坪くらい？50坪くらい？」と二択で
+   area の値: xsmall(10坪以下)/small(11〜20坪)/medium(21〜30坪)/large(31〜50坪)/xlarge(51坪以上)
 
-4. 7項目のヒアリングが終わったら update_state(question="少々お待ちください", choices="") を呼ぶ
-   システムが自動で金額を計算し、ツール応答に金額と「【次の質問】お名前をカタカナで」のカンペが返ってくる。
-   金額と現地調査の案内を読み上げたら、選択肢（「はい/いいえ」）は絶対に出さない。「ご希望されますか？」などの確認もしない。
-   カンペに従い、そのままお名前のヒアリングに進む。
+4. 築年数
+   質問例：「築何年くらいになりますか？」
+   1回目「わからない」→「だいたい新しい・古いどちらでしょうか？」
+   2回目「わからない」→「30年以上経っていますか？」とYES/NOで推定
+   age の値: new(10年未満)/young(20〜30年)/old(40〜50年)/veryold(それ以上)
 
-5. 連絡先ヒアリング（名前カタカナ→住所→電話番号）
-   各項目が分かったら update_state に含めて次の質問へ
-   名前・住所が1回で聞き取れなかった場合は「恐れ入りますが、画面のフォームからご入力いただけますか」と促してそのまま待つ。
-   すべて揃ったら update_state(question="ありがとうございます。画面をご確認の上、送信ボタンを押してください", choices="")
+【見積もり計算】
+必須4項目が揃ったら update_state(question="少々お待ちください") を呼ぶ。
+システムが自動で計算し、ツール応答で「仮のお見積もり金額は○○万円〜○○万円です。あくまで仮のお見積りなので…」という指示文が返る。
+**その指示文をそのまま読み上げる**こと。AIで勝手に変えない。
 
-【フローB：問い合わせ・その他】
-内容を聞き update_state(memo=内容, question="...", choices="...")
-答えられる内容（営業時間：AIで24時間・現地調査は平日9〜17時／対応エリア：宮城県全域）は即答。
-それ以外は「担当者から折り返しさせていただきます」と伝え、名前と電話番号を聞く。
+【金額提示後の分岐】
+金額を読み上げ「いかがでしょうか」と聞いたら、お客様の返事を待つ。
 
-【ルール】
-- 1ターンに update_state は必ず1回だけ。絶対に複数回呼ばない
-- ユーザーが明示的に回答した項目のみ update_state に含める。回答を得ていない項目を推測・デフォルトで設定しない
-- 直前のターンで設定済みの質問を再度繰り返さない
-- 金額はシステムが自動で計算してツール応答に返す。AI自身で計算しない
-- 1発言は1文・最大30文字。枕詞や復唱を入れず端的に聞く
-- 相槌（「はい」「承知しました」）は質問の冒頭に1語だけ置いてよい。相槌単独では終わらず必ず質問とセットにする
-- 直前の発言と同じ内容を繰り返さない
-- 名前はカタカナ、symptomは日本語、住所は番地・建物名・部屋番号まで
-- 補足・要望（電話希望時間など）は memo に記録
-- 聞き取れなければ「もう一度、ゆっくり言って頂けますか」（最大2回）
-- submit_inquiry は呼ばない`
+▼お客様が肯定的（「はい」「お願いします」「現地調査して欲しい」「お願いしたい」等）
+→ 「ありがとうございます。それではお名前をカタカナで教えていただけますか？」
+→ お名前 → 電話番号 → ご住所の順でヒアリング
+→ すべて揃ったら update_state(question="ありがとうございます。画面の内容をご確認の上、送信ボタンを押してください")
+→ お客様が送信ボタンを押すまで「送信ボタンを押してください」と促し続ける
+
+▼お客様が否定的（「結構です」「考えます」「また今度」「いりません」等）
+→ 「承知しました。是非ご検討くださいませ。お電話ありがとうございました」
+→ それ以上ヒアリングしない・送信しない
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【フローB：一般問い合わせ】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+質問内容を聞き memo に記録。
+- FAQ即答可能（営業時間：AIで24時間・現地調査は平日9〜17時／対応エリア：宮城県全域）
+- それ以外は「担当者から折り返します」→ 名前・電話番号 → 送信
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【共通：データ記録ルール】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- symptom: 害獣被害の症状を端的に記録（例：「天井裏から足音」）
+- memo: 自由発言・心情・補足情報を要約して記録（サーバーで「・」区切り蓄積）
+  - **重要：同じmemo内容を複数ターンに渡って繰り返し送らない。新しい情報があった時だけmemoを更新する**
+  - **既に記録済みの内容と同じ内容や部分一致するものは送らない（サーバー側で重複検知するが念のため）**
+- name: カタカナで記録
+- 連絡先ヒアリングで1回聞き取れなかったら「恐れ入りますが、画面のフォームからご入力いただけますか」と促す
+- 直前のターンと同じ質問を繰り返さない`
 }
 
 // ─── Next.js セットアップ ──────────────────────────────────
@@ -363,14 +402,24 @@ app.prepare().then(() => {
       }
     }
 
+    // 必須4項目：これがないと見積もり不可
+    const REQUIRED_KEYS = ['pest', 'building', 'area', 'age'] as const
+    const MISSING_LABEL: Record<string, string> = {
+      pest: '害獣の種類', building: '建物の種類', area: '床面積', age: '築年数',
+    }
+    // 計算用の全項目（任意項目は不問・デフォルト乗数1.0で計算）
     const ESTIMATE_KEYS = ['pest', 'building', 'area', 'age', 'renovation', 'duration', 'history'] as const
     const estState: Partial<Record<typeof ESTIMATE_KEYS[number], string>> = {}
-    const contactState: { name?: string; address?: string; phone?: string } = {}
+    const contactState: { name?: string; address?: string; phone?: string; memo?: string } = {}
     let estimateShown = false
     let pendingReveal: { min: number; max: number; pest: string } | null = null
 
     const genAI = new GoogleGenAI({ apiKey })
     let session: Awaited<ReturnType<typeof genAI.live.connect>> | null = null
+
+    // お客様の音声書き起こしを時系列で蓄積
+    const customerTranscripts: string[] = []
+    let pendingTranscript = ''
 
     genAI.live.connect({
       model: 'gemini-3.1-flash-live-preview',
@@ -381,6 +430,7 @@ app.prepare().then(() => {
             prebuiltVoiceConfig: { voiceName: 'Leda' },
           },
         },
+        inputAudioTranscription: {},
         systemInstruction: buildEstimateSystemInstruction(greeting),
         tools: [{
           functionDeclarations: [
@@ -429,7 +479,24 @@ app.prepare().then(() => {
               }
             }
           }
+          // お客様の音声書き起こし（inputAudioTranscription）
+          const inputTrans = (msg.serverContent as { inputTranscription?: { text?: string } })?.inputTranscription
+          if (inputTrans?.text) {
+            pendingTranscript += inputTrans.text
+          }
           if (msg.serverContent?.turnComplete) {
+            // ターン完了時、お客様の発言をまとめてリストに追加
+            const cleaned = pendingTranscript.trim()
+            // ハングル文字（U+AC00-U+D7AF, U+1100-U+11FF, U+3130-U+318F）が含まれていたら除外
+            const hasHangul = /[가-힯ᄀ-ᇿ㄰-㆏]/.test(cleaned)
+            if (cleaned.length > 1 && !hasHangul) {
+              customerTranscripts.push(cleaned)
+              send({ type: 'customerTranscript', transcripts: [...customerTranscripts] })
+              console.log(`[Gemini Estimate] 📝 お客様: ${cleaned}`)
+            } else if (hasHangul) {
+              console.log(`[Gemini Estimate] 🚫 韓国語誤認識のため除外: ${cleaned}`)
+            }
+            pendingTranscript = ''
             if (pendingReveal) {
               send({ type: 'turnComplete', estimateReveal: pendingReveal })
               pendingReveal = null
@@ -443,8 +510,8 @@ app.prepare().then(() => {
               if (fc.name === 'update_state') {
                 const args = fc.args as Record<string, string>
 
-                // 見積もり7項目を蓄積
-                for (const key of ESTIMATE_KEYS) {
+                // 必須項目：unknownは保存しない（聞き直す必要あり）
+                for (const key of REQUIRED_KEYS) {
                   if (args[key] && args[key] !== 'unknown') estState[key] = args[key]
                 }
                 // 連絡先を蓄積
@@ -452,7 +519,17 @@ app.prepare().then(() => {
                 if (args.address && args.address !== 'unknown') contactState.address = args.address
                 if (args.phone   && args.phone   !== 'unknown') contactState.phone   = args.phone
 
-                const estimateReady = ESTIMATE_KEYS.every(k => !!estState[k])
+                // memo は追記（既存に「・」で連結）— 重複・部分一致は追記しない
+                if (args.memo && args.memo !== 'unknown') {
+                  const newMemo = args.memo.trim()
+                  const existing = contactState.memo ?? ''
+                  // 既存memoに既に含まれている / 直前と同一の場合はスキップ
+                  if (!existing.includes(newMemo)) {
+                    contactState.memo = existing ? `${existing}・${newMemo}` : newMemo
+                  }
+                }
+
+                const estimateReady = REQUIRED_KEYS.every(k => !!estState[k])
 
                 // 見積もり計算
                 let estimateResult: { min: number; max: number; pest: string } | undefined
@@ -468,10 +545,10 @@ app.prepare().then(() => {
                 if (estimateReady) {
                   if (!contactState.name) {
                     hint = '【次の質問】お名前をカタカナで'
-                  } else if (!contactState.address) {
-                    hint = '【次の質問】ご住所を番地まで'
                   } else if (!contactState.phone) {
                     hint = '【次の質問】お電話番号'
+                  } else if (!contactState.address) {
+                    hint = '【次の質問】ご住所を番地まで'
                   } else {
                     hint = '【次の発言】画面をご確認の上、送信ボタンを押してください'
                   }
@@ -480,13 +557,18 @@ app.prepare().then(() => {
                 // toolResponse 文字列の組み立て
                 // 見積もり完了の最初のターンは結果のみ。連絡先カンペは次のターンから。
                 const isFirstReveal = estimateReady && !!estimateResult && !estimateShown
+                const isCalcRequest = /お待ち|計算|見積/.test(args.question ?? '')
                 let toolOut: string
                 if (isFirstReveal) {
                   estimateShown = true
                   pendingReveal = estimateResult!
                   const mn = Math.round(estimateResult!.min / 10000)
                   const mx = Math.round(estimateResult!.max / 10000)
-                  toolOut = `あくまで仮のお見積金額となりますが、${mn}万円〜${mx}万円です。無料で現地調査ができますが、いかがですか 【次の質問】お名前をカタカナで`
+                  toolOut = `仮のお見積もり金額は ${mn}万円〜${mx}万円 です。あくまで仮のお見積りなので、正式なお見積りには無料現地調査が必要です。いかがでしょうか`
+                } else if (isCalcRequest && !estimateReady) {
+                  // 計算しようとしたが必須項目不足 — 足りない項目を返してAIに聞き直させる
+                  const missing = REQUIRED_KEYS.filter(k => !estState[k]).map(k => MISSING_LABEL[k])
+                  toolOut = `【未確認のため計算できません】${missing.join('・')}を確認してください`
                 } else {
                   toolOut = `ok${hint ? ' ' + hint : ''}`
                 }
@@ -500,6 +582,7 @@ app.prepare().then(() => {
                   estimateReady,
                   estimateResult: isFirstReveal ? undefined : estimateResult,
                   contactState: { ...contactState },
+                  estState: { ...estState },
                 })
 
                 // Geminiへ直接 toolResponse を送信（サーバー主導）
@@ -512,6 +595,9 @@ app.prepare().then(() => {
                   } catch (e) {
                     console.error('[Gemini Estimate] toolResponse送信失敗:', e)
                   }
+
+                  // ※ 以前は isFirstReveal で追加プロンプトを送っていたが、復唱の原因になるため削除。
+                  // toolResponse の指示文だけでAIに読み上げさせる。
                 } else {
                   console.warn('[Gemini Estimate] session未初期化のためtoolResponse送信スキップ')
                 }
