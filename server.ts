@@ -431,6 +431,14 @@ app.prepare().then(() => {
           },
         },
         inputAudioTranscription: {},
+        // VAD調整：お客様が考える時間を許容（沈黙判定2秒・終話判定を緩く）
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            silenceDurationMs: 2000,
+            endOfSpeechSensitivity: 'END_SENSITIVITY_LOW' as never,
+            startOfSpeechSensitivity: 'START_SENSITIVITY_LOW' as never,
+          },
+        },
         systemInstruction: buildEstimateSystemInstruction(greeting),
         tools: [{
           functionDeclarations: [
