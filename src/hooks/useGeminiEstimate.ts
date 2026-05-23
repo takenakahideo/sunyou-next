@@ -43,7 +43,6 @@ export function useGeminiEstimate() {
   const [inquiryResult,  setInquiryResult]  = useState<ContactData | null>(null)
   const [suggestions,    setSuggestions]    = useState<string[]>([])
   const [aiQuestion,     setAiQuestion]     = useState<string>('')
-  const [customerTranscripts, setCustomerTranscripts] = useState<string[]>([])
 
   const wsRef             = useRef<WebSocket | null>(null)
   const inCtxRef          = useRef<AudioContext | null>(null)
@@ -104,7 +103,7 @@ export function useGeminiEstimate() {
     // 初回接続のみ状態リセット（自動再接続時は会話状態を維持）
     if (reconnectCountRef.current === 0) {
       setEstimateResult(null); setContactData({}); setInquiryResult(null)
-      setSuggestions([]); setAiQuestion(''); setCustomerTranscripts([])
+      setSuggestions([]); setAiQuestion('')
       contactBufferRef.current = {}
       isSubmittedRef.current = false
       userClosedRef.current = false
@@ -198,11 +197,6 @@ export function useGeminiEstimate() {
           return
         }
 
-        if (msg.type === 'customerTranscript') {
-          setCustomerTranscripts(msg.transcripts as string[])
-          return
-        }
-
         if (msg.type === 'error') {
           console.error('[Gemini Estimate]', msg.message)
           setVoiceState('error'); cleanup()
@@ -237,7 +231,7 @@ export function useGeminiEstimate() {
     }
   }, [cleanup])
 
-  return { voiceState, estimateResult, contactData, inquiryResult, connect, disconnect, sendText, submitCompleted, suggestions, aiQuestion, setInquiryResult, customerTranscripts }
+  return { voiceState, estimateResult, contactData, inquiryResult, connect, disconnect, sendText, submitCompleted, suggestions, aiQuestion, setInquiryResult }
 }
 
 // ─── Audio utilities ───────────────────────────────────────

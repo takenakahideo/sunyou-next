@@ -417,10 +417,6 @@ app.prepare().then(() => {
     const genAI = new GoogleGenAI({ apiKey })
     let session: Awaited<ReturnType<typeof genAI.live.connect>> | null = null
 
-    // お客様の音声書き起こしを時系列で蓄積
-    const customerTranscripts: string[] = []
-    let pendingTranscript = ''
-
     genAI.live.connect({
       model: 'gemini-3.1-flash-live-preview',
       config: {
@@ -430,7 +426,6 @@ app.prepare().then(() => {
             prebuiltVoiceConfig: { voiceName: 'Leda' },
           },
         },
-        inputAudioTranscription: {},
         // VAD調整：お客様が考える時間を許容（沈黙判定2秒・終話判定を緩く）
         realtimeInputConfig: {
           automaticActivityDetection: {
@@ -487,24 +482,7 @@ app.prepare().then(() => {
               }
             }
           }
-          // お客様の音声書き起こし（inputAudioTranscription）
-          const inputTrans = (msg.serverContent as { inputTranscription?: { text?: string } })?.inputTranscription
-          if (inputTrans?.text) {
-            pendingTranscript += inputTrans.text
-          }
           if (msg.serverContent?.turnComplete) {
-            // ターン完了時、お客様の発言をまとめてリストに追加
-            const cleaned = pendingTranscript.trim()
-            // ハングル文字（U+AC00-U+D7AF, U+1100-U+11FF, U+3130-U+318F）が含まれていたら除外
-            const hasHangul = /[가-힯ᄀ-ᇿ㄰-㆏]/.test(cleaned)
-            if (cleaned.length > 1 && !hasHangul) {
-              customerTranscripts.push(cleaned)
-              send({ type: 'customerTranscript', transcripts: [...customerTranscripts] })
-              console.log(`[Gemini Estimate] 📝 お客様: ${cleaned}`)
-            } else if (hasHangul) {
-              console.log(`[Gemini Estimate] 🚫 韓国語誤認識のため除外: ${cleaned}`)
-            }
-            pendingTranscript = ''
             if (pendingReveal) {
               send({ type: 'turnComplete', estimateReveal: pendingReveal })
               pendingReveal = null

@@ -13,7 +13,7 @@ export function EstimateChatModal() {
     voiceState,
     estimateResult, contactData,
     connect, disconnect, sendText, submitCompleted,
-    suggestions, aiQuestion, customerTranscripts,
+    suggestions, aiQuestion,
   } = useGeminiEstimate()
 
 
@@ -59,7 +59,6 @@ export function EstimateChatModal() {
         renovation:   estimateResult?.renovation,
         duration:     estimateResult?.duration,
         history:      estimateResult?.history,
-        customerVoice: customerTranscripts,
       }
       const res = await fetch('/api/inquiry', {
         method: 'POST',
@@ -456,28 +455,6 @@ function EstimateCard({ result }: { result: { min: number; max: number; pest: st
   )
 }
 
-function CustomerVoiceCard({ transcripts }: { transcripts: string[] }) {
-  // 最新5件を表示（古いものは折りたたみ）
-  const recent = transcripts.slice(-5)
-  const olderCount = transcripts.length - recent.length
-  return (
-    <div style={{ background: '#fff', border: '1.5px solid #d4ddf8', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#1a3a6e', marginBottom: 6, letterSpacing: '0.04em' }}>
-        🎙 お客様の声 {transcripts.length > 0 && `(${transcripts.length}件)`}
-      </div>
-      {olderCount > 0 && (
-        <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>...以前 {olderCount}件</div>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {recent.map((t, i) => (
-          <div key={i} style={{ background: '#f0f4ff', borderRadius: 8, padding: '6px 10px', fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
-            「{t}」
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 function ContactCard({ data, estimatePest }: { data: ContactData; estimatePest: string | null }) {
   const items = [

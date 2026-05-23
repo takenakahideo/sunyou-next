@@ -17,7 +17,6 @@ interface InquiryData {
   renovation?: string
   duration?: string
   history?: string
-  customerVoice?: string[]
 }
 
 const BUILDING_LABEL: Record<string, string> = {
@@ -49,10 +48,6 @@ async function sendLineNotification(data: InquiryData, timestamp: string) {
     ? `見積（簡易）: ${data.estimatePest} ${Math.round(data.estimateMin / 10000)}万円〜${Math.round(data.estimateMax / 10000)}万円`
     : null
 
-  const voiceBlock = (data.customerVoice && data.customerVoice.length > 0)
-    ? ['━━━━━━━━━━━━━━', '🎙 お客様の発言（書き起こし）', ...data.customerVoice.map((v, i) => `${i + 1}. ${v}`)]
-    : []
-
   const lines = [
     '📩 新規お問い合わせ',
     '━━━━━━━━━━━━━━',
@@ -72,7 +67,6 @@ async function sendLineNotification(data: InquiryData, timestamp: string) {
     data.duration   ? `被害期間: ${DURATION_LABEL[data.duration]   ?? data.duration}`    : null,
     data.history    ? `対策経験: ${HISTORY_LABEL[data.history]     ?? data.history}`     : null,
     estimateLine,
-    ...voiceBlock,
     '━━━━━━━━━━━━━━',
   ].filter(Boolean).join('\n')
 
@@ -138,17 +132,10 @@ export async function POST(req: NextRequest) {
     console.log(`電話番号 : ${data.phone}`)
     console.log(`症状     : ${data.symptom}`)
     if (data.estimatePest) console.log(`見積     : ${data.estimatePest} ${data.estimateMin}〜${data.estimateMax}円`)
-    if (data.customerVoice && data.customerVoice.length > 0) {
-      console.log('🎙 お客様の発言:')
-      data.customerVoice.forEach((v, i) => console.log(`  ${i + 1}. ${v}`))
-    }
     console.log('==========================================\n')
 
     // Sheets保存（最優先・失敗したら500）
-    await appendInquiryRow({
-      ...data,
-      customerVoice: data.customerVoice?.join(' / ') ?? '',
-    })
+    await appendInquiryRow({ ...data })
 
     // LINE通知（副次的・失敗してもOK）
     try {
