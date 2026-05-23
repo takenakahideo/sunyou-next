@@ -70,7 +70,7 @@ async function sendLineNotification(data: InquiryData, timestamp: string) {
     '━━━━━━━━━━━━━━',
   ].filter(Boolean).join('\n')
 
-  await fetch('https://api.line.me/v2/bot/message/push', {
+  const lineRes = await fetch('https://api.line.me/v2/bot/message/push', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -81,6 +81,12 @@ async function sendLineNotification(data: InquiryData, timestamp: string) {
       messages: [{ type: 'text', text: lines }],
     }),
   })
+  if (!lineRes.ok) {
+    const body = await lineRes.text()
+    console.error(`[LINE通知] APIエラー ${lineRes.status}: ${body}`)
+  } else {
+    console.log('[LINE通知] 送信成功')
+  }
 }
 
 // 重複登録防止：直近10秒以内に同じ電話番号の登録があれば拒否
